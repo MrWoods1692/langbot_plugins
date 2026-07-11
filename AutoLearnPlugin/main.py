@@ -3,7 +3,8 @@ from __future__ import annotations
 from langbot_plugin.api.definition.plugin import BasePlugin
 from langbot_plugin.api.entities.builtin.provider import message as provider_message
 
-from core.store import LearnStore, STORAGE_KEY, _user_key
+from core.store import LearnStore, STORAGE_KEY
+from core.commands import run_learn_command
 
 
 class AutoLearnPlugin(BasePlugin):
@@ -103,3 +104,14 @@ class AutoLearnPlugin(BasePlugin):
 
     def build_prompt_context(self, session_name: str) -> str:
         return self.store.build_prompt_context(session_name)
+
+    async def handle_learn_command(
+        self,
+        launcher_type: str,
+        launcher_id: str | int,
+        sender_id: str | int,
+        params: list[str],
+    ) -> str:
+        return await run_learn_command(
+            self.store, self, launcher_type, launcher_id, sender_id, params
+        )
