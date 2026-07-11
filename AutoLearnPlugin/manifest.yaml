@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: Plugin
 metadata:
-  author: mrcwoods
-  name: AutoLearnPlugin
-  repository: https://github.com/mrcwoods/langbot_plugins
+  author: MrWoods1692
+  name: AutoLearn
+  repository: https://github.com/MrWoods1692/langbot_plugins
   version: 0.1.0
   description:
     en_US: Autonomous learning plugin — conversation style, group slang, social relationships, personality evolution, and memory graph visualization.
