@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <rect width="100" height="100" rx="20" fill="#F5A623"/>
+  <!-- 第一个笑脸 emoji -->
+  <circle cx="35" cy="45" r="18" fill="#FFE066"/>
+  <circle cx="30" cy="42" r="2.5" fill="#333"/>
+  <circle cx="40" cy="42" r="2.5" fill="#333"/>
+  <path d="M28,50 Q35,56 42,50" fill="none" stroke="#333" stroke-width="2" stroke-linecap="round"/>
+  <!-- 第二个狗 emoji -->
+  <circle cx="65" cy="45" r="18" fill="#D4A574"/>
+  <circle cx="60" cy="42" r="2.5" fill="#333"/>
+  <circle cx="70" cy="42" r="2.5" fill="#333"/>
+  <ellipse cx="65" cy="50" rx="4" ry="3" fill="#333"/>
+  <!-- 加号 -->
+  <text x="50" y="52" text-anchor="middle" font-size="16" font-weight="bold" fill="#FFF">+</text>
+  <!-- 箭头 -->
+  <path d="M50,70 L50,82" stroke="#FFF" stroke-width="2.5" stroke-linecap="round"/>
+  <polygon points="44,78 50,86 56,78" fill="#FFF"/>
+</svg>

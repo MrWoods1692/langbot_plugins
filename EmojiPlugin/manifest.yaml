@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: Plugin
+metadata:
+  author: MrWoods1692
+  name: Emoji
+  repository: https://github.com/MrWoods1692/langbot_plugins
+  version: 0.1.0
+  description:
+    en_US: Emoji fusion plugin — combine two emojis into one via yunzhiapi.cn API
+    zh_Hans: 表情融合插件 — 通过云智 API 将两个 Emoji 表情融合为一个
+  label:
+    en_US: Emoji Fusion
+    zh_Hans: 表情融合
+  icon: assets/icon.svg
+spec:
+  config:
+    - name: api_token
+      type: string
+      label:
+        en_US: Emoji API Token
+        zh_Hans: Emoji API Token
+      description:
+        en_US: Token for yunzhiapi.cn Emoji API. Get it from https://yunzhiapi.cn
+        zh_Hans: yunzhiapi.cn 表情融合 API 的 Token，从 https://yunzhiapi.cn 获取
+      required: true
+      default: ''
+    - name: show_link
+      type: boolean
+      label:
+        en_US: Show Link
+        zh_Hans: 发送链接
+      description:
+        en_US: When enabled, also send the fusion result link alongside the image.
+        zh_Hans: 启用后，发送融合图片的同时附带结果链接。
+      default: false
+  components:
+    EventListener:
+      fromDirs:
+        - path: components/event_listener/
+    Command:
+      fromDirs:
+        - path: components/commands/
+execution:
+  python:
+    path: main.py
+    attr: EmojiPlugin
