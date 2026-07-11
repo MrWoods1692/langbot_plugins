@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: EventListener
+metadata:
+  name: default
+  label:
+    en_US: VoiceOutput Listener
+    zh_Hans: 语音输出监听器
+spec:
+execution:
+  python:
+    path: default.py
+    attr: DefaultEventListener

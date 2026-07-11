@@ -1,0 +1,52 @@
+apiVersion: v1
+kind: Plugin
+metadata:
+  author: MrWoods1692
+  name: VoiceOutput
+  repository: https://github.com/MrWoods1692/langbot_plugins
+  version: 0.1.0
+  description:
+    en_US: Voice output plugin — intercepts LLM responses and converts them to speech via TTS API
+    zh_Hans: 语音输出插件 — 拦截 LLM 回复内容，通过 TTS 接口转换成语音发送
+  label:
+    en_US: Voice Output
+    zh_Hans: 语音输出
+  icon: assets/icon.svg
+spec:
+  config:
+    - name: api_token
+      type: string
+      label:
+        en_US: TTS API Token
+        zh_Hans: TTS API Token
+      description:
+        en_US: Token for yunzhiapi.cn TTS API. Get it from https://yunzhiapi.cn
+        zh_Hans: yunzhiapi.cn 语音合成 API 的 Token，从 https://yunzhiapi.cn 获取
+      required: true
+      default: ''
+    - name: max_text_length
+      type: number
+      label:
+        en_US: Max Text Length
+        zh_Hans: 最大文本长度
+      description:
+        en_US: Maximum text length for TTS conversion. Texts longer than this will not be converted to speech.
+        zh_Hans: 语音转换的最大文本长度，超过此长度的文本不会转为语音。
+      default: 500
+    - name: auto_voice
+      type: boolean
+      label:
+        en_US: Auto Voice Output
+        zh_Hans: 自动语音输出
+      description:
+        en_US: When enabled, LLM responses will be automatically converted to voice and sent.
+        zh_Hans: 启用后，LLM 回复将自动转为语音发送。
+      default: true
+  components:
+    EventListener:
+      fromDirs:
+        - path: components/event_listener/
+execution:
+  python:
+    path: main.py
+    attr: VoiceOutputPlugin
