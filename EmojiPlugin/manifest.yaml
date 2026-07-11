@@ -4,7 +4,7 @@ metadata:
   author: MrWoods1692
   name: Emoji
   repository: https://github.com/MrWoods1692/langbot_plugins
-  version: 0.1.0
+  version: 0.2.0
   description:
     en_US: Emoji fusion plugin — combine two emojis into one via yunzhiapi.cn API
     zh_Hans: 表情融合插件 — 通过云智 API 将两个 Emoji 表情融合为一个
