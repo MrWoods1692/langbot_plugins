@@ -4,6 +4,7 @@ from typing import AsyncGenerator
 
 from langbot_plugin.api.definition.components.command.command import Command
 from langbot_plugin.api.entities.builtin.command.context import ExecuteContext, CommandReturn
+from langbot_plugin.api.entities.builtin.platform import message as platform_message
 
 from core.tts import text_to_speech
 
@@ -51,7 +52,12 @@ class TTS(Command):
                 voice_url = result.get("data", {}).get("voice", "")
 
                 if voice_url:
-                    yield CommandReturn(voice_url=voice_url)
+                    # Send voice message directly via reply
+                    chain = platform_message.MessageChain([
+                        platform_message.Voice(url=voice_url),
+                    ])
+                    await context.reply(chain)
+                    yield CommandReturn()
                     return
             except Exception as e:
                 print(f"[VoiceOutput] Command TTS failed: {e}", flush=True)

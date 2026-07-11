@@ -46,6 +46,9 @@ spec:
     EventListener:
       fromDirs:
         - path: components/event_listener/
+    Command:
+      fromDirs:
+        - path: components/commands/
 execution:
   python:
     path: main.py

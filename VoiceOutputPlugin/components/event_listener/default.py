@@ -67,6 +67,7 @@ class DefaultEventListener(EventListener):
                         platform_message.Voice(url=voice_url),
                     ])
                     await event_context.reply(chain)
+                    event_context.prevent_default()
                     print(f"[VoiceOutput] Voice message sent: {voice_url}", flush=True)
                     return
             except Exception as e:
