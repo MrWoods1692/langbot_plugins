@@ -1,0 +1,34 @@
+apiVersion: v1
+kind: Plugin
+metadata:
+  author: MrWoods1692
+  name: TimezoneQuery
+  repository: https://github.com/MrWoods1692/langbot_plugins
+  version: 0.1.0
+  description:
+    en_US: Global timezone query plugin — query standard timezones like UST (US Time) and CST (China Standard Time)
+    zh_Hans: 全球时区查询插件 — 查询UST（美国时区）和 CST（中国标准时间）等标准时区
+  label:
+    en_US: Timezone Query
+    zh_Hans: 时区查询
+  icon: assets/icon.svg
+spec:
+  config:
+    - name: api_token
+      type: string
+      label:
+        en_US: API Token
+        zh_Hans: API Token
+      description:
+        en_US: Token for yunzhiapi.cn timezone API. Get it from https://yunzhiapi.cn
+        zh_Hans: yunzhiapi.cn 时区 API 的 Token，从 https://yunzhiapi.cn 获取
+      required: true
+      default: ''
+  components:
+    Command:
+      fromDirs:
+        - path: components/commands/
+execution:
+  python:
+    path: main.py
+    attr: TimezoneQueryPlugin
