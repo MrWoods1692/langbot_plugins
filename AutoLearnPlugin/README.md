@@ -30,11 +30,18 @@ Autonomous learning plugin for LangBot. Learns from real conversations to adapt 
 
 ```
 !learn              — Overview
+!learn qfx          — Group analysis chart image (group chat only)
 !learn slang        — Top group slang words
 !learn relation     — Relationship & favorability for current user
 !learn infer        — Infer slang meanings via LLM (requires llm_model config)
 !learn graph        — Memory graph statistics
 ```
+
+## Auto Learning
+
+- Every group message is automatically learned (no command required)
+- Per-speaker style, relationship and slang context is injected into LLM prompts
+- Use `!learn qfx` in a group to get a visual analysis chart
 
 ## Development
 

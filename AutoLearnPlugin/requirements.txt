@@ -1,1 +1,2 @@
 langbot-plugin
+pillow>=10.0.0

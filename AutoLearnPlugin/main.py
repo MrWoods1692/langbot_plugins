@@ -4,7 +4,7 @@ from langbot_plugin.api.definition.plugin import BasePlugin
 from langbot_plugin.api.entities.builtin.provider import message as provider_message
 
 from core.store import LearnStore, STORAGE_KEY
-from core.commands import run_learn_command
+from core.commands import run_learn_command, LearnResult
 
 
 class AutoLearnPlugin(BasePlugin):
@@ -12,11 +12,13 @@ class AutoLearnPlugin(BasePlugin):
 
     store: LearnStore
     _dirty: bool
+    _pending_senders: dict[str, str | int]
 
     def __init__(self) -> None:
         super().__init__()
         self.store = LearnStore()
         self._dirty = False
+        self._pending_senders = {}
 
     async def initialize(self) -> None:
         try:
@@ -47,11 +49,23 @@ class AutoLearnPlugin(BasePlugin):
         launcher_id: str | int,
         sender_id: str | int,
         text: str,
+        image_count: int = 0,
     ) -> None:
-        self.store.record_message(launcher_type, launcher_id, sender_id, text, is_bot=False)
+        session_name = f"{launcher_type}_{launcher_id}"
+        self._pending_senders[session_name] = sender_id
+        self.store.record_message(
+            launcher_type, launcher_id, sender_id, text,
+            is_bot=False, image_count=image_count,
+        )
         self.mark_dirty()
         if self.store.data["stats"]["messages_processed"] % 20 == 0:
             await self.persist()
+
+    def set_pending_sender(self, session_name: str, sender_id: str | int) -> None:
+        self._pending_senders[session_name] = sender_id
+
+    def get_pending_sender(self, session_name: str) -> str | int | None:
+        return self._pending_senders.get(session_name)
 
     async def record_bot_response(self, session_name: str, response_text: str) -> None:
         parts = session_name.split("_", 1)
@@ -102,8 +116,12 @@ class AutoLearnPlugin(BasePlugin):
             await self.persist()
         return results
 
-    def build_prompt_context(self, session_name: str) -> str:
-        return self.store.build_prompt_context(session_name)
+    def build_prompt_context(
+        self, session_name: str, sender_id: str | int | None = None
+    ) -> str:
+        if sender_id is None:
+            sender_id = self.get_pending_sender(session_name)
+        return self.store.build_prompt_context(session_name, sender_id)
 
     async def handle_learn_command(
         self,
@@ -111,7 +129,7 @@ class AutoLearnPlugin(BasePlugin):
         launcher_id: str | int,
         sender_id: str | int,
         params: list[str],
-    ) -> str:
+    ) -> LearnResult:
         return await run_learn_command(
             self.store, self, launcher_type, launcher_id, sender_id, params
         )

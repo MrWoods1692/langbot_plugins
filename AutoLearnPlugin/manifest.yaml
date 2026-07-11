@@ -17,12 +17,12 @@ spec:
     - name: llm_model
       type: llm-model-selector
       label:
-        en_US: LLM Model (for slang inference)
-        zh_Hans: LLM 模型（用于黑话推断）
+        en_US: LLM Model (required for group analysis)
+        zh_Hans: LLM 模型（群分析必需）
       description:
-        en_US: Optional. Used to infer meanings of high-frequency group slang.
-        zh_Hans: 可选。用于推断群聊高频黑话的含义。
-      required: false
+        en_US: Required for !learn qfx group analysis image. Also used for slang inference.
+        zh_Hans: !learn qfx 群分析图必需。也用于黑话含义推断。
+      required: true
       default: ''
     - name: enable_prompt_injection
       type: boolean

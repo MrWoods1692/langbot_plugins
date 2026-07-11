@@ -5,6 +5,7 @@ import re
 import time
 import uuid
 from copy import deepcopy
+from datetime import datetime
 from typing import Any
 
 STORAGE_KEY = "auto_learn_data"
@@ -13,6 +14,8 @@ DEFAULT_DATA: dict[str, Any] = {
     "style_profiles": {},
     "slang": {},
     "relationships": {},
+    "group_members": {},
+    "group_stats": {},
     "personality": {
         "traits": {
             "warmth": 0.5,
@@ -67,6 +70,14 @@ def _extract_tokens(text: str) -> list[str]:
     return tokens
 
 
+def _count_emojis(text: str) -> int:
+    return len(re.findall(r"[\U0001F300-\U0001FAFF\u2600-\u27BF]", text))
+
+
+def _hour_key() -> str:
+    return str(datetime.now().hour)
+
+
 def _sentiment_score(text: str) -> float:
     score = 0.0
     lower = text.lower()
@@ -108,22 +119,107 @@ class LearnStore:
         sender_id: str | int,
         text: str,
         is_bot: bool = False,
+        image_count: int = 0,
     ) -> None:
-        if not text or not text.strip():
+        text = (text or "").strip()
+        if not text and image_count == 0:
             return
 
-        text = text.strip()
-        user_key = _user_key(launcher_type, sender_id)
+        user_key = _user_key("person", sender_id)
         group_key = _group_key(launcher_type, launcher_id)
+        char_count = len(text)
+        emoji_count = _count_emojis(text)
         self.data["stats"]["messages_processed"] += 1
 
         if not is_bot:
-            self._update_style(user_key, text)
-            self._update_slang(group_key, text)
-            self._update_relationship(user_key, text)
-            self._update_memory_graph(user_key, group_key, text, sender_id, launcher_id)
-        else:
+            if text:
+                self._update_style(user_key, text)
+                self._update_slang(group_key, text)
+                self._update_relationship(user_key, text)
+                self._update_memory_graph(user_key, group_key, text, sender_id, launcher_id)
+            if launcher_type == "group":
+                self._update_group_member(
+                    group_key, user_key, sender_id, text,
+                    char_count, image_count, emoji_count,
+                )
+                self._update_group_stats(
+                    group_key, sender_id, text, char_count, image_count, emoji_count,
+                )
+        elif text:
             self._evolve_personality(text)
+
+    def _update_group_stats(
+        self,
+        group_key: str,
+        sender_id: str | int,
+        text: str,
+        char_count: int,
+        image_count: int,
+        emoji_count: int,
+    ) -> None:
+        stats = self.data["group_stats"].setdefault(
+            group_key,
+            {
+                "total_messages": 0,
+                "total_chars": 0,
+                "total_images": 0,
+                "total_emojis": 0,
+                "hourly": {},
+                "message_log": [],
+            },
+        )
+        stats["total_messages"] += 1
+        stats["total_chars"] += char_count
+        stats["total_images"] += image_count
+        stats["total_emojis"] += emoji_count
+        hour = _hour_key()
+        stats["hourly"][hour] = stats["hourly"].get(hour, 0) + 1
+
+        if text:
+            log: list[dict[str, Any]] = stats["message_log"]
+            log.append({
+                "user_id": str(sender_id),
+                "text": text[:200],
+                "ts": _now(),
+            })
+            if len(log) > 200:
+                stats["message_log"] = log[-150:]
+
+    def _update_group_member(
+        self,
+        group_key: str,
+        user_key: str,
+        sender_id: str | int,
+        text: str,
+        char_count: int,
+        image_count: int,
+        emoji_count: int,
+    ) -> None:
+        members = self.data["group_members"].setdefault(group_key, {})
+        entry = members.setdefault(
+            user_key,
+            {
+                "user_id": str(sender_id),
+                "message_count": 0,
+                "char_count": 0,
+                "image_count": 0,
+                "emoji_count": 0,
+                "last_active": 0,
+                "samples": [],
+            },
+        )
+        entry["message_count"] += 1
+        entry["char_count"] += char_count
+        entry["image_count"] += image_count
+        entry["emoji_count"] += emoji_count
+        entry["last_active"] = _now()
+        entry["user_id"] = str(sender_id)
+        if text:
+            samples: list[str] = entry["samples"]
+            if len(samples) < 20:
+                samples.append(text[:120])
+            elif entry["message_count"] % 3 == 0:
+                samples[entry["message_count"] % 20] = text[:120]
 
     def _update_style(self, user_key: str, text: str) -> None:
         profiles = self.data["style_profiles"]
@@ -309,7 +405,11 @@ class LearnStore:
     def get_style_profile(self, user_key: str) -> dict[str, Any] | None:
         return self.data["style_profiles"].get(user_key)
 
-    def build_prompt_context(self, session_name: str) -> str:
+    def build_prompt_context(
+        self,
+        session_name: str,
+        sender_id: str | int | None = None,
+    ) -> str:
         parts: list[str] = []
         traits = self.data["personality"]["traits"]
         parts.append(
@@ -319,38 +419,102 @@ class LearnStore:
             f"好奇={traits['curiosity']:.2f}"
         )
 
-        if session_name in self.data["relationships"]:
-            rel = self.data["relationships"][session_name]
-            parts.append(
-                f"与当前用户的关系: 好感度={rel['favorability']:.0f}/100, "
-                f"心情={rel['mood']}, 互动次数={rel['interaction_count']}"
-            )
+        is_group = session_name.startswith("group_")
+        user_key: str | None = None
+        if sender_id is not None:
+            user_key = _user_key("person", sender_id)
+        elif not is_group:
+            user_key = session_name
 
-        if session_name in self.data["style_profiles"]:
-            style = self.data["style_profiles"][session_name]
-            top_phrases = sorted(
-                style["common_phrases"].items(), key=lambda x: x[1], reverse=True
-            )[:5]
-            if top_phrases:
-                phrase_str = ", ".join(f"{p}({c})" for p, c in top_phrases)
+        if user_key:
+            rel = self.data["relationships"].get(user_key)
+            if rel:
                 parts.append(
-                    f"用户表达风格: 平均句长={style['avg_length']:.0f}字, "
-                    f"常用表达=[{phrase_str}]"
+                    f"当前发言者({user_key}): 好感度={rel['favorability']:.0f}/100, "
+                    f"心情={rel['mood']}, 互动{rel['interaction_count']}次"
                 )
-                if style["samples"]:
-                    parts.append(f"用户说话示例: {style['samples'][-1]}")
+            style = self.data["style_profiles"].get(user_key)
+            if style:
+                top_phrases = sorted(
+                    style["common_phrases"].items(), key=lambda x: x[1], reverse=True
+                )[:5]
+                if top_phrases:
+                    phrase_str = ", ".join(f"{p}({c})" for p, c in top_phrases)
+                    parts.append(
+                        f"发言风格: 均句长{style['avg_length']:.0f}字, "
+                        f"常用[{phrase_str}]"
+                    )
+                    if style["samples"]:
+                        parts.append(f"说话示例: 「{style['samples'][-1]}」")
 
-        slang = self.get_top_slang(session_name if session_name.startswith("group_") else None, 5)
-        if slang:
-            slang_str = "; ".join(
-                f"{s['word']}(出现{s['count']}次"
-                + (f", 含义:{s['meaning']}" if s.get("meaning") else "")
-                + ")"
-                for s in slang
-            )
-            parts.append(f"群黑话/高频词: {slang_str}")
+        if is_group:
+            group_key = session_name
+            members = self.data["group_members"].get(group_key, {})
+            if members:
+                top = sorted(
+                    members.values(), key=lambda m: m["message_count"], reverse=True
+                )[:5]
+                member_str = ", ".join(
+                    f"{m['user_id']}({m['message_count']}条)" for m in top
+                )
+                parts.append(f"本群活跃成员: {member_str}")
+
+            slang = self.get_top_slang(group_key, 5)
+            if slang:
+                slang_str = "; ".join(
+                    f"{s['word']}({s['count']}次"
+                    + (f":{s['meaning']}" if s.get("meaning") else "")
+                    + ")"
+                    for s in slang
+                )
+                parts.append(f"群黑话/高频词: {slang_str}")
 
         return "\n".join(parts)
+
+    def get_group_analysis(self, group_key: str) -> dict[str, Any]:
+        group_id = group_key.split("_", 1)[-1] if "_" in group_key else group_key
+        members_raw = self.data["group_members"].get(group_key, {})
+        top_members: list[dict[str, Any]] = []
+        total_messages = 0
+        for user_key, info in members_raw.items():
+            total_messages += info["message_count"]
+            rel = self.data["relationships"].get(user_key, {})
+            top_members.append({
+                "user_key": user_key,
+                "user_id": info["user_id"],
+                "message_count": info["message_count"],
+                "favorability": rel.get("favorability", 50),
+                "mood": rel.get("mood", "neutral"),
+            })
+        top_members.sort(key=lambda m: m["message_count"], reverse=True)
+
+        slang = self.get_top_slang(group_key, 10)
+        graph = self.data["memory_graph"]
+        type_counts: dict[str, int] = {}
+        for node in graph["nodes"]:
+            if node.get("id", "").startswith(f"group:{group_key}"):
+                continue
+            t = node.get("type", "unknown")
+            type_counts[t] = type_counts.get(t, 0) + 1
+
+        graph_summary = [
+            f"节点 {len(graph['nodes'])} · 边 {len(graph['edges'])}",
+        ]
+        for t, c in sorted(type_counts.items(), key=lambda x: -x[1])[:5]:
+            graph_summary.append(f"  {t}: {c}")
+
+        return {
+            "group_id": group_id,
+            "group_key": group_key,
+            "total_messages": total_messages,
+            "member_count": len(members_raw),
+            "slang_count": len(self.data["slang"].get(group_key, {})),
+            "graph_nodes": len(graph["nodes"]),
+            "top_members": top_members,
+            "top_slang": slang,
+            "personality": self.data["personality"]["traits"],
+            "graph_summary": graph_summary,
+        }
 
     def set_slang_meaning(self, group_key: str, word: str, meaning: str, confidence: float = 0.8) -> bool:
         entry = self.data["slang"].get(group_key, {}).get(word)
