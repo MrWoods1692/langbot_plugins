@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Command
+metadata:
+  name: learn
+  label:
+    en_US: Learn
+    zh_Hans: 学习
+  description:
+    en_US: View autonomous learning stats, slang, relationships and memory graph
+    zh_Hans: 查看自主学习统计、黑话、关系和记忆图谱
+spec:
+execution:
+  python:
+    path: learn.py
+    attr: Learn

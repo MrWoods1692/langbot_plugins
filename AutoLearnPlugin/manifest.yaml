@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: Plugin
+metadata:
+  author: mrcwoods
+  name: AutoLearnPlugin
+  repository: https://github.com/mrcwoods/langbot_plugins
+  version: 0.1.0
+  description:
+    en_US: Autonomous learning plugin — conversation style, group slang, social relationships, personality evolution, and memory graph visualization.
+    zh_Hans: 自主学习插件 — 从对话中学习表达风格、理解群黑话、记录社交关系与好感度、人格演化及记忆图谱可视化。
+  label:
+    en_US: Auto Learn
+    zh_Hans: 自主学习
+  icon: assets/icon.svg
+spec:
+  config:
+    - name: llm_model
+      type: llm-model-selector
+      label:
+        en_US: LLM Model (for slang inference)
+        zh_Hans: LLM 模型（用于黑话推断）
+      description:
+        en_US: Optional. Used to infer meanings of high-frequency group slang.
+        zh_Hans: 可选。用于推断群聊高频黑话的含义。
+      required: false
+      default: ''
+    - name: enable_prompt_injection
+      type: boolean
+      label:
+        en_US: Inject learned context into prompts
+        zh_Hans: 将学习上下文注入提示词
+      description:
+        en_US: When enabled, learned style, relationships and slang are added to the system prompt.
+        zh_Hans: 启用后，将学习到的风格、关系和黑话注入系统提示词。
+      default: true
+  components:
+    EventListener:
+      fromDirs:
+        - path: components/event_listener/
+    Command:
+      fromDirs:
+        - path: components/commands/
+    Tool:
+      fromDirs:
+        - path: components/tools/
+    Page:
+      fromDirs:
+        - path: components/pages/
+          maxDepth: 2
+execution:
+  python:
+    path: main.py
+    attr: AutoLearnPlugin

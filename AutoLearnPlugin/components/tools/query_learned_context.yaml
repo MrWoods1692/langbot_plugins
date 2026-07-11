@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Tool
+metadata:
+  name: query_learned_context
+  label:
+    en_US: Query Learned Context
+    zh_Hans: 查询学习上下文
+  description:
+    en_US: Query learned conversation style, relationships, slang and memory from autonomous learning.
+    zh_Hans: 查询自主学习到的对话风格、社交关系、群黑话和记忆信息。
+spec:
+  parameters:
+    type: object
+    properties:
+      query_type:
+        type: string
+        description: 'Type of query: style, relation, slang, memory, summary'
+      target_id:
+        type: string
+        description: Optional user or group ID to query. Uses current session if empty.
+    required:
+      - query_type
+  llm_prompt: Query learned context about user style, relationships, group slang or memory graph.
+execution:
+  python:
+    path: query_learned_context.py
+    attr: QueryLearnedContext
