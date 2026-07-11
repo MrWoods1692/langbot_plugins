@@ -20,8 +20,8 @@ spec:
         en_US: LLM Model (required for group analysis)
         zh_Hans: LLM 模型（群分析必需）
       description:
-        en_US: Required for !learn qfx group analysis image. Also used for slang inference.
-        zh_Hans: !learn qfx 群分析图必需。也用于黑话含义推断。
+        en_US: 'Required for !learn qfx group analysis image. Also used for slang inference.'
+        zh_Hans: 'Required for !learn qfx group analysis image. Also used for slang inference.'
       required: true
       default: ''
     - name: enable_prompt_injection
