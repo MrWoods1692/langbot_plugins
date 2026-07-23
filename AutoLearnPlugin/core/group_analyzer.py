@@ -10,6 +10,11 @@ from langbot_plugin.api.entities.builtin.provider import message as provider_mes
 from core.store import LearnStore
 
 
+MAX_ANALYZED_MEMBERS = 12
+MAX_MEMBER_SAMPLES = 8
+MAX_RECENT_LOGS = 60
+
+
 def _extract_llm_text(resp: provider_message.Message) -> str:
     if isinstance(resp.content, str):
         return resp.content.strip()
@@ -39,6 +44,145 @@ def _parse_llm_json(text: str) -> dict[str, Any] | None:
     return None
 
 
+def _clean_text(text: Any, limit: int) -> str:
+    cleaned = re.sub(r"\s+", " ", str(text or "")).strip()
+    return cleaned[:limit]
+
+
+def _member_fallback(member: dict[str, Any]) -> dict[str, Any]:
+    message_count = int(member.get("message_count", 0) or 0)
+    char_count = int(member.get("char_count", 0) or 0)
+    emoji_count = int(member.get("emoji_count", 0) or 0)
+    image_count = int(member.get("image_count", 0) or 0)
+    avg_len = char_count / max(message_count, 1)
+
+    if message_count >= 30:
+        activity = "高频活跃"
+    elif message_count >= 8:
+        activity = "稳定参与"
+    else:
+        activity = "偶尔冒泡"
+
+    habits: list[str] = []
+    if avg_len >= 40:
+        habits.append("偏长句输出")
+    elif avg_len <= 8 and message_count > 0:
+        habits.append("短句快打")
+    if emoji_count:
+        habits.append("表情使用明显")
+    if image_count:
+        habits.append("会用图片参与话题")
+
+    return {
+        "user_id": str(member.get("user_id", "?")),
+        "message_count": message_count,
+        "personality": f"{activity}型成员，基于现有发言量和表达长度判断。",
+        "character_habits": "，".join(habits) or "数据仍少，暂以常规文字互动为主。",
+    }
+
+
+def _normalize_analysis(parsed: dict[str, Any], raw: dict[str, Any]) -> dict[str, Any]:
+    llm = parsed if isinstance(parsed, dict) else {}
+    overview = llm.get("overview") if isinstance(llm.get("overview"), dict) else {}
+
+    normalized: dict[str, Any] = {
+        "overview": {
+            "quality_review": _clean_text(
+                overview.get("quality_review") or "群聊数据已收集，发言画像仍在积累中。",
+                220,
+            ),
+            "active_periods": (
+                overview.get("active_periods")
+                if isinstance(overview.get("active_periods"), list)
+                else []
+            ),
+            "group_vibe": _clean_text(overview.get("group_vibe") or "持续观察中", 60),
+        },
+        "members": [],
+        "classic_quotes": [],
+    }
+
+    active_periods = [
+        _clean_text(period, 32)
+        for period in normalized["overview"]["active_periods"][:4]
+        if _clean_text(period, 32)
+    ]
+    if not active_periods:
+        active_periods = [
+            f"{h['hour']}点({h['count']}条)"
+            for h in raw.get("active_hours", [])[:4]
+        ]
+    normalized["overview"]["active_periods"] = active_periods
+
+    llm_members = llm.get("members") if isinstance(llm.get("members"), list) else []
+    by_user = {
+        str(item.get("user_id")): item
+        for item in llm_members
+        if isinstance(item, dict) and item.get("user_id") is not None
+    }
+    for member in raw.get("members", [])[:MAX_ANALYZED_MEMBERS]:
+        user_id = str(member.get("user_id", "?"))
+        merged = _member_fallback(member)
+        llm_member = by_user.get(user_id, {})
+        if isinstance(llm_member, dict):
+            merged["personality"] = _clean_text(
+                llm_member.get("personality") or merged["personality"],
+                100,
+            )
+            merged["character_habits"] = _clean_text(
+                llm_member.get("character_habits") or merged["character_habits"],
+                100,
+            )
+        normalized["members"].append(merged)
+
+    seen_quotes: set[tuple[str, str]] = set()
+    llm_quotes = (
+        llm.get("classic_quotes")
+        if isinstance(llm.get("classic_quotes"), list)
+        else []
+    )
+    known_users = {str(m.get("user_id")) for m in raw.get("members", [])[:MAX_ANALYZED_MEMBERS]}
+    known_texts = [
+        item.get("text", "")
+        for item in raw.get("message_log", [])
+        if item.get("text")
+    ]
+    for quote in llm_quotes:
+        if not isinstance(quote, dict):
+            continue
+        user_id = str(quote.get("user_id", "?"))
+        text = _clean_text(quote.get("quote"), 120)
+        if not text or user_id not in known_users:
+            continue
+        if not any(text in source or source in text for source in known_texts):
+            continue
+        key = (user_id, text)
+        if key in seen_quotes:
+            continue
+        seen_quotes.add(key)
+        normalized["classic_quotes"].append({
+            "quote": text,
+            "user_id": user_id,
+            "comment": _clean_text(quote.get("comment") or "代表性发言", 60),
+        })
+        if len(normalized["classic_quotes"]) >= 6:
+            break
+
+    if not normalized["classic_quotes"]:
+        for item in raw.get("message_log", [])[-6:]:
+            text = _clean_text(item.get("text"), 120)
+            if text and str(item.get("user_id")) in known_users:
+                normalized["classic_quotes"].append({
+                    "quote": text,
+                    "user_id": str(item.get("user_id", "?")),
+                    "comment": "近期代表发言",
+                })
+            if len(normalized["classic_quotes"]) >= 3:
+                break
+
+    return normalized
+
+
 def collect_group_raw_data(store: LearnStore, group_key: str) -> dict[str, Any]:
     stats = store.data.get("group_stats", {}).get(group_key, {})
     members_raw = store.data.get("group_members", {}).get(group_key, {})
@@ -53,7 +197,11 @@ def collect_group_raw_data(store: LearnStore, group_key: str) -> dict[str, Any]:
             "char_count": info.get("char_count", 0),
             "image_count": info.get("image_count", 0),
             "emoji_count": info.get("emoji_count", 0),
-            "samples": info.get("samples", [])[:12],
+            "samples": [
+                cleaned
+                for sample in info.get("samples", [])
+                if (cleaned := _clean_text(sample, 100))
+            ][:MAX_MEMBER_SAMPLES],
             "favorability": rel.get("favorability", 50),
             "mood": rel.get("mood", "neutral"),
             "common_phrases": sorted(
@@ -67,6 +215,16 @@ def collect_group_raw_data(store: LearnStore, group_key: str) -> dict[str, Any]:
     hourly = stats.get("hourly", {})
     active_hours = sorted(hourly.items(), key=lambda x: x[1], reverse=True)[:6]
 
+    message_log = [
+        {
+            "user_id": str(item.get("user_id", "?")),
+            "text": cleaned,
+            "ts": item.get("ts"),
+        }
+        for item in stats.get("message_log", [])[-MAX_RECENT_LOGS:]
+        if (cleaned := _clean_text(item.get("text"), 140))
+    ]
+
     return {
         "group_key": group_key,
         "group_id": group_key.split("_", 1)[-1] if "_" in group_key else group_key,
@@ -76,15 +234,16 @@ def collect_group_raw_data(store: LearnStore, group_key: str) -> dict[str, Any]:
         "total_emojis": stats.get("total_emojis", 0),
         "participant_count": len(members_raw),
         "active_hours": [{"hour": int(h), "count": c} for h, c in active_hours],
-        "members": members,
-        "message_log": stats.get("message_log", [])[-80:],
+        "members": members[:MAX_ANALYZED_MEMBERS],
+        "member_overflow_count": max(len(members) - MAX_ANALYZED_MEMBERS, 0),
+        "message_log": message_log,
         "top_slang": store.get_top_slang(group_key, 15),
     }
 
 
 def _build_analysis_prompt(raw: dict[str, Any]) -> str:
     members_text = []
-    for m in raw.get("members", [])[:15]:
+    for m in raw.get("members", [])[:MAX_ANALYZED_MEMBERS]:
         phrases = ", ".join(f"{p}({c})" for p, c in m.get("common_phrases", [])[:5])
         samples = "\n".join(f"    - {s}" for s in m.get("samples", [])[:6])
         members_text.append(
@@ -99,7 +258,7 @@ def _build_analysis_prompt(raw: dict[str, Any]) -> str:
     hours_text = ", ".join(f"{h['hour']}点({h['count']}条)" for h in hours) or "数据不足"
 
     log_lines = []
-    for item in raw.get("message_log", [])[-50:]:
+    for item in raw.get("message_log", [])[-45:]:
         log_lines.append(f"[{item.get('user_id')}] {item.get('text', '')[:100]}")
 
     slang_lines = [
@@ -145,7 +304,7 @@ def _build_analysis_prompt(raw: dict[str, Any]) -> str:
 }}
 
 要求:
-1. members 覆盖所有有发言的成员
+1. members 只覆盖“各成员数据”里列出的成员，且每个成员必须出现一次
 2. classic_quotes 摘抄 3-6 条最有代表性的原句
 3. 分析要基于实际数据，不要编造不存在的用户
 4. 全部用中文"""
@@ -180,6 +339,6 @@ async def analyze_group_with_llm(plugin, group_key: str) -> dict[str, Any]:
 
     return {
         "raw": raw,
-        "llm": parsed,
+        "llm": _normalize_analysis(parsed, raw),
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
     }
